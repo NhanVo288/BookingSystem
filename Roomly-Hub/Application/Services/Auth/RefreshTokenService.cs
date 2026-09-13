@@ -1,0 +1,101 @@
+using Application.Common.Constants;
+using Application.Common.Helpers;
+using Application.Common.Results;
+using Application.DTOs;
+using Application.Events.Notifications;
+using Application.Interfaces.Persistence;
+using Application.Interfaces.Services;
+using Domain.Entities;
+using Domain.Interfaces.Repositories;
+using FluentValidation;
+using MediatR;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Application.Services
+{
+    public class RefreshTokenService : IRefreshTokenService
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly ITokenService _tokenService;
+        private readonly IHasher _hasher;
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IValidator<RefreshTokenRequestDto> _validator;
+        private readonly JwtSettings _jwtSettings;
+        private readonly IPublisher _publisher;
+        private readonly ILogger<RefreshTokenService> _logger;
+
+        public RefreshTokenService(
+            IUserRepository userRepository,
+            ITokenService tokenService,
+            IHasher hasher,
+            IUnitOfWork unitOfWork,
+            IValidator<RefreshTokenRequestDto> validator,
+            IOptions<JwtSettings> jwtSettings,
+            IPublisher publisher,
+            ILogger<RefreshTokenService> logger)
+        {
+            _userRepository = userRepository;
+            _tokenService = tokenService;
+            _hasher = hasher;
+            _unitOfWork = unitOfWork;
+            _validator = validator;
+            _jwtSettings = jwtSettings.Value;
+            _publisher = publisher;
+            _logger = logger;
+        }
+
+        public async Task<Result<LoginResponseDto>> RefreshTokenAsync(RefreshTokenRequestDto requestDto, CancellationToken cancellationToken = default)
+        {
+            if (requestDto is null)
+                return Result<LoginResponseDto>.Failure(Errors.Codes.Common.ValidationError, Errors.Messages.Common.RequestBodyRequired);
+
+            var validationResult = await _validator.ValidateAsync(requestDto, cancellationToken);
+            if (!validationResult.IsValid)
+                return Result<LoginResponseDto>.Failure(Errors.Codes.Common.ValidationError, Errors.Messages.Common.RequestValidationFailed, ValidationHelper.ToErrorDictionary(validationResult));
+
+            var tokenHash = _hasher.HashToken(requestDto.RefreshToken);
+
+            var user = await _userRepository.GetByRefreshTokenHashAsync(tokenHash, cancellationToken);
+            if (user is null)
+                return Result<LoginResponseDto>.Failure(Errors.Codes.Auth.InvalidRefreshToken, Errors.Messages.Auth.InvalidRefreshToken);
+
+            var refreshToken = user.RefreshTokens.FirstOrDefault(rt => rt.TokenHash == tokenHash);
+            if (refreshToken is null || !refreshToken.IsActive())
+            {
+                try
+                {
+                    await _publisher.Publish(new SecurityAlertEvent(user.Id), cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to publish SecurityAlertEvent for user {UserId}", user.Id);
+                }
+
+                return Result<LoginResponseDto>.Failure(Errors.Codes.Auth.InvalidRefreshToken, Errors.Messages.Auth.InvalidRefreshToken);
+            }
+
+            if (!user.IsActive)
+                return Result<LoginResponseDto>.Failure(Errors.Codes.Auth.AccountInactive, Errors.Messages.Auth.AccountInactive);
+
+            if (user.IsLocked)
+                return Result<LoginResponseDto>.Failure(Errors.Codes.Auth.AccountLocked, Errors.Messages.Auth.AccountLocked);
+
+            refreshToken.Revoke();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var newAccessToken = await _tokenService.GenerateAccessToken(user);
+            var newRefreshTokenString = await _tokenService.GenerateRefreshTokenAsync();
+
+            user.AddRefreshToken(RefreshToken.Create(
+                user.Id,
+                _hasher.HashToken(newRefreshTokenString),
+                DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays)));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return Result<LoginResponseDto>.Success(
+                new LoginResponseDto(newAccessToken, newRefreshTokenString, "Token refreshed successfully."));
+        }
+    }
+}

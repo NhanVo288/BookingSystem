@@ -1,0 +1,655 @@
+# BookingRoom
+
+> **BookingRoom** is a booking platform for guest and host workflows, centered on room listings, booking requests, host approval, secure payments, KYC review, user/room reviews, notifications, and authenticated user operations.
+
+## Web frontend
+
+The repository now includes a responsive React 19 + Vite + TypeScript application in `frontend/`. It covers room discovery and details, authentication and recovery, profiles, KYC, booking/payment/refund flows, host room and calendar controls, auctions, wallet history, reviews, notifications, and moderator workflows.
+
+Run the complete stack:
+
+```bash
+docker compose up --build
+```
+
+- Web app: `http://localhost:3000`
+- API and Swagger: `http://localhost:5080/swagger`
+- Development mailbox (OTP emails): `http://localhost:8025`
+
+For frontend development with hot reload:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite proxies `/api` and `/hubs` to the backend at `http://localhost:5080`. Copy `.env.example` to `.env` only when overriding these defaults.
+
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)
+![ASP.NET Core](https://img.shields.io/badge/ASP.NET%20Core-Web%20API-512BD4?logo=dotnet)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Npgsql-336791?logo=postgresql)
+![Entity%20Framework%20Core](https://img.shields.io/badge/Entity%20Framework%20Core-10.0-512BD4)
+![Serilog](https://img.shields.io/badge/Logging-Serilog-1E1E1E)
+![Swagger](https://img.shields.io/badge/OpenAPI-Swagger-85EA2D)
+
+---
+
+## 1. Executive Summary
+
+BookingRoom is an API-driven booking system designed marketplace where guests search rooms, create bookings, complete stays, submit reviews, receive notifications, and complete payments while hosts manage listings, approve or reject requests, and control room availability.
+
+The platform focuses on the core operational needs of a modern booking domain:
+
+- guest booking lifecycle management,
+- host-controlled request approval flows,
+- room publishing, moderation, activation, and photo management,
+- secure authentication and account recovery,
+- payment initiation, refund handling, and webhook reconciliation,
+- review lifecycle management (submission, moderation, visibility),
+- notification lifecycle management (unread feeds, unread counts, read-all, channel preferences),
+- and strong auditability across all transactional workflows.
+
+BookingRoom is built to keep booking, payment, review, notification, and state-transition logic explicit, testable, and safe under concurrent usage.
+
+---
+
+## 2. Core Functional Features
+
+### Authentication and Account Management
+
+BookingRoom includes a full authentication and identity workflow:
+
+- user registration,
+- email verification,
+- login and JWT token issuance,
+- refresh token rotation,
+- Google login,
+- forgot password and reset password flows,
+- account unlock requests,
+- logout,
+- and user profile operations.
+
+### Room Management
+
+Hosts can manage rooms through a complete lifecycle:
+
+- create room listings,
+- update room details,
+- upload and remove room photos,
+- submit a room for review,
+- activate or deactivate a room,
+- delete a room,
+- search rooms using filters,
+- and inspect room availability.
+
+### Booking Lifecycle
+
+The booking module supports both direct booking and host-approval workflows.
+
+Key operations include:
+
+- create booking,
+- update booking dates,
+- cancel booking,
+- view guest bookings,
+- list host booking requests,
+- load a host room calendar,
+- approve booking requests,
+- and reject booking requests.
+
+The codebase supports host-approval rooms where multiple requests can exist for the same date range and are handled through booking state and payment flow rather than being blocked too early.
+
+### Payment Processing
+
+BookingRoom integrates with the SePay Payment Gateway for checkout creation and payment tracking.
+
+Supported payment operations include:
+
+- retrieving available payment methods,
+- creating payment invoices for bookings,
+- tracking booking payment status,
+- refunding paid bookings,
+- and processing gateway webhooks for payment success, failure, and cancellation.
+
+### Reviews System
+
+BookingRoom includes a dedicated review subsystem with command/query separation and moderation:
+
+- submit reviews for completed bookings,
+- support review types: `GuestToRoom`, `GuestToHost`, `HostToGuest`, `RoommateToGuest`,
+- enforce reviewer ownership and booking-state rules,
+- prevent duplicate review submission per booking/reviewer/type,
+- query visible room reviews and user reviews,
+- moderator review flagging,
+- moderator review removal,
+- and automatic room rating recalculation from visible `GuestToRoom` reviews.
+
+### Notifications System
+
+BookingRoom includes a notifications subsystem for authenticated users:
+
+- unread notifications feed,
+- unread notifications count,
+- mark-all-as-read endpoint,
+- notification channel preferences update endpoint,
+- notification channel preference persistence,
+- and typed notification models (type, category, channel, status).
+
+### KYC and Moderation
+
+The application includes supporting workflows for trust and review:
+
+- KYC submission,
+- KYC review and moderation,
+- room moderation flows,
+- and review moderation flows.
+
+### Audit and Reliability
+
+The system persists webhook events and uses consistent error handling so payment, booking, review, and notification operations remain traceable, idempotent, and concurrency-safe.
+
+---
+
+## 3. Technical Architecture
+
+BookingRoom follows **Clean Architecture** with clear separation between domain rules, application workflows, infrastructure concerns, and HTTP delivery.
+
+### Domain Layer
+
+The Domain layer holds the business model:
+
+- booking entities,
+- room entities,
+- authentication entities,
+- review entities,
+- notification entities,
+- payment-related entities,
+- value-like models and enums,
+- and invariant-bearing methods such as booking/payment/review state transitions.
+
+This layer is kept free from framework-specific dependencies wherever possible.
+
+### Application Layer
+
+The Application layer coordinates use cases and business orchestration.
+
+It contains:
+
+- service interfaces,
+- command and query services,
+- DTOs,
+- validators,
+- mappers,
+- result handling,
+- and shared application constants and helpers.
+
+The application layer is where booking rules, review rules, notification rules, validation, authorization checks, and payment workflow orchestration are implemented.
+
+### Infrastructure Layer
+
+The Infrastructure layer provides technical implementations:
+
+- Entity Framework Core persistence,
+- PostgreSQL integration through Npgsql,
+- repository implementations,
+- unit of work implementation,
+- SePay Payment Gateway integration,
+- Google authentication support,
+- email delivery support,
+- notification channel strategy implementations,
+- logging integration,
+- and supporting services such as token generation and hashing.
+
+### API Layer
+
+The API layer exposes HTTP endpoints through ASP.NET Core controllers:
+
+- authentication endpoints,
+- room endpoints,
+- booking endpoints,
+- payment endpoints,
+- review endpoints,
+- notification endpoints,
+- KYC endpoints,
+- user endpoints,
+- and webhook endpoints.
+
+Controllers remain thin and primarily translate HTTP requests into application-service calls and structured HTTP responses.
+
+### CQRS-Style Separation
+
+BookingRoom uses a CQRS-style structure, but request dispatch still favors direct service boundaries for core use cases.
+
+Instead, the codebase separates responsibilities through dedicated services such as:
+
+- `IBookingCommandService`,
+- `IBookingQueryService`,
+- `IBookingPaymentFlowService`,
+- `IReviewCommandService`,
+- `IReviewQueryService`,
+- `INotificationService`,
+- `IRoomService`,
+- `IAuthService`,
+- and `IPaymentWebhookService`.
+
+This gives practical separation benefits while keeping workflows explicit and testable.
+
+### Result Pattern for Error Handling
+
+The application layer uses a `Result` pattern to represent expected business outcomes without relying on exceptions for normal control flow.
+
+Typical outcomes include:
+
+- success,
+- validation failure,
+- unauthorized action,
+- not found,
+- invalid state,
+- duplicate action,
+- and concurrency conflict.
+
+This makes controller-to-service interactions predictable and keeps HTTP mapping straightforward.
+
+### Validation with FluentValidation
+
+Incoming DTOs and command models are validated with FluentValidation.
+
+Validation is used for:
+
+- required inputs,
+- format checks,
+- date and state constraints,
+- rating/comment constraints,
+- notification preference constraints,
+- and request consistency before any transactional work begins.
+
+### Concurrency Handling
+
+Concurrency is handled through transactional execution and explicit conflict handling.
+
+The codebase uses:
+
+- optimistic concurrency checks,
+- `xmin`-based concurrency support in PostgreSQL migrations,
+- transaction scopes through `IUnitOfWork.ExecuteInTransactionAsync`,
+- and `ConcurrencyException` mapping to domain-level failures.
+
+This is critical for bookings, approvals, payments, and refund flows where simultaneous requests can occur.
+
+### Repository and Unit of Work Patterns
+
+BookingRoom uses repositories for data access and a unit of work for transactional boundaries.
+
+This provides:
+
+- centralized persistence logic,
+- reusable queries,
+- atomic updates across aggregates,
+- and easier testability.
+
+### Outbox Pattern for Payment Events
+
+Payment-confirmed domain events are persisted through an outbox table before being dispatched.
+
+This improves reliability for payment webhook processing by keeping booking payment state changes and follow-up event publication in the same persistence flow. Pending outbox messages are dispatched by a Hangfire job and can be retried safely.
+
+### Saga-Style Booking Cancellation
+
+Booking cancellation now routes through a dedicated cancellation workflow service.
+
+The cancellation flow coordinates booking state changes, wallet refund behavior, and notification publishing so wallet-backed cancellations do not finalize state before the refund path is handled.
+
+### Webhook Logging and Idempotency
+
+Payment webhooks are persisted through a dedicated `PaymentWebhookLog` model and repository.
+
+This supports:
+
+- auditability,
+- duplicate detection,
+- replay analysis,
+- and safe retry handling for gateway callbacks.
+
+---
+
+## 5. Technology Stack
+
+### Backend
+
+- **.NET 10**
+- **ASP.NET Core Web API**
+- **Entity Framework Core 10**
+- **FluentValidation**
+- **Newtonsoft.Json**
+- **Serilog**
+- **Swashbuckle / OpenAPI**
+- **MediatR**
+
+### Database
+
+- **PostgreSQL**
+- **Npgsql.EntityFrameworkCore.PostgreSQL**
+
+### Authentication and Security
+
+- **JWT Bearer authentication**
+- **Google authentication**
+- **OTP-based email verification**
+- **refresh tokens**
+- **BCrypt password hashing**
+- **role and permission checks**
+
+### Payment and External Services
+
+- **SePay Payment Gateway**
+- **email delivery via MailKit**
+- **local webhook testing via ngrok**
+
+### Supporting Infrastructure Packages
+
+- **Hangfire.PostgreSql**
+- **StackExchange.Redis**
+- **Microsoft.EntityFrameworkCore.Design / Tools**
+
+---
+
+## 6. Webhook & Payment Lifecycle
+
+BookingRoom uses a secure payment flow centered on invoice creation and webhook reconciliation.
+
+### 1. Invoice Creation
+
+When a guest initiates payment for a booking, the system generates a signed SePay checkout form.
+
+The invoice creation flow stores payment references back on the booking so later events can be reconciled.
+
+### 2. Payment Method Retrieval
+
+The API can request available payment methods from the gateway and expose them to the client.
+
+### 3. Booking Payment Status
+
+The platform can return the current booking payment state so the client can reflect whether the booking is still awaiting payment, paid, refunded, or otherwise transitioned.
+
+### 4. Webhook Reception
+
+The webhook controller receives SePay IPN callbacks and confirms captured, approved payments.
+
+### 5. Signature Verification
+
+Each IPN is authenticated from the `X-Secret-Key` header using a fixed-time comparison before any state change is allowed.
+
+### 6. Idempotency
+
+Webhook processing is idempotent.
+
+If the booking is already paid or already cancelled, the service returns success without applying the same transition twice.
+
+### 7. Logging and Persistence
+
+Every webhook is written to `PaymentWebhookLogs` with:
+
+- invoice or reference metadata,
+- webhook type,
+- raw payload,
+- booking linkage,
+- processing status,
+- timestamps,
+- and any processing error.
+
+### 8. Booking State Rules
+
+Failed payment webhooks do not mark the booking as failed.
+
+The booking remains payable so the guest can retry payment later.
+
+### 9. Refund Flow
+
+Refunds are handled separately through the payment/booking service layer and are only allowed when the booking is already in a paid state. Refund endpoints also require elevated admin authorization.
+
+---
+
+## 7. Reviews and Notifications APIs
+
+### Reviews Endpoints
+
+- `POST /api/reviews` (`Authorized`)
+  Submits review using current user id from JWT claim.
+
+- `GET /api/reviews/rooms/{roomId}` (`AllowAnonymous`)
+  Returns visible paginated reviews for a room.
+
+- `GET /api/reviews/users/{userId}` (`AllowAnonymous`)
+  Returns visible paginated reviews for a user.
+
+- `POST /api/reviews/{reviewId}/flag` (`Authorized`)
+  Flags review (moderator/superadmin only).
+
+- `DELETE /api/reviews/{reviewId}` (`Authorized`)
+  Removes review (moderator/superadmin only).
+
+### Notifications Endpoints
+
+- `GET /api/notifications/unread` (`Authorized`)
+  Returns unread notifications for the current authenticated user.
+
+- `GET /api/notifications/unread/count` (`Authorized`)
+  Returns unread notifications count for the current authenticated user.
+
+- `POST /api/notifications/read-all` (`Authorized`)
+  Marks all unread notifications as read for the current authenticated user.
+
+- `PUT /api/notifications/preferences` (`Authorized`)
+  Updates channel preferences for the current authenticated user.
+
+### Business Rules Highlights
+
+- Booking must be `Completed` before review submission.
+- Ownership checks are enforced by review type.
+- `RoommateToGuest` requires `SharedRoom` and valid overlapping-roommate booking context.
+- Duplicate review submissions are blocked.
+- Only visible `GuestToRoom` reviews contribute to room average rating.
+
+---
+
+## 8. Project Standards
+
+BookingRoom follows a set of explicit engineering standards that shape how code is written, organized, and evolved.
+
+### Clean Architecture
+
+The solution is split into `Domain`, `Application`, `Infrastructure`, and API projects.
+
+This separation keeps business rules independent from technical details and makes the codebase easier to maintain.
+
+### SOLID Principles
+
+The codebase is structured around the SOLID principles:
+
+- **Single Responsibility**: controllers, services, and repositories each have focused responsibilities,
+- **Open/Closed**: behavior is extended through new services and handlers rather than rewriting existing ones,
+- **Liskov Substitution**: abstractions are used consistently through interfaces,
+- **Interface Segregation**: service interfaces are separated by use case,
+- **Dependency Inversion**: higher-level modules depend on abstractions, not concrete infrastructure.
+
+### DRY
+
+Common logic is centralized into reusable services, validators, helpers, mappers, and shared error/result types.
+
+This reduces duplication across controllers and application workflows.
+
+### Inversion of Control and Dependency Injection
+
+The application uses built-in ASP.NET Core DI to wire services, repositories, validators, and infrastructure dependencies.
+
+Controllers depend on interfaces rather than concrete classes.
+
+### CQRS-Style Structure
+
+The project uses command/query separation through dedicated services instead of MediatR.
+
+This keeps the workflow explicit and avoids an extra messaging layer.
+
+### Result-Driven Application Flow
+
+Expected business outcomes are represented with `Result` objects rather than exception-driven branching.
+
+This is used consistently across booking, room, auth, payment, and review workflows.
+
+### Validation-First Design
+
+Requests are validated before state changes occur.
+
+FluentValidation is used throughout the application layer to prevent invalid data from reaching the domain and persistence layers.
+
+### Transactional Consistency
+
+Important operations are wrapped in Unit of Work execution blocks.
+
+This ensures booking updates, payment transitions, webhook state changes, and rating recalculation side-effects remain atomic and consistent.
+
+### Concurrency Safety
+
+The project uses optimistic concurrency and explicit conflict handling.
+
+This is especially important for bookings, host approvals, cancellation, and payment reconciliation.
+
+### Structured Logging
+
+Serilog and `ILogger<T>` are used for operational observability.
+
+Important actions such as authentication, booking changes, payment creation, webhook processing, review submit/query/moderation, and rating recalculation are logged with context.
+
+### Secure-by-Default Web and Payment Behavior
+
+The codebase includes:
+
+- JWT-based authentication,
+- role and ownership checks,
+- webhook signature verification,
+- and strict state validation before critical actions.
+
+### Booking Domain Rules
+
+The booking domain is implemented with explicit rules for:
+
+- awaiting payment,
+- pending host approval,
+- confirmed bookings,
+- cancellations,
+- refunds,
+- and room availability checks.
+
+### Payment Retry Policy
+
+Failed payment webhooks are intentionally non-destructive.
+
+The booking stays payable, which aligns with the requirement that guests can retry payment after a failure.
+
+### Framework and Library Choices Used in This Codebase
+
+The current codebase uses the following implementation technologies and libraries:
+
+- ASP.NET Core Web API
+- Entity Framework Core
+- PostgreSQL / Npgsql
+- FluentValidation
+- Serilog
+- Newtonsoft.Json
+- Swashbuckle / OpenAPI
+- JWT Bearer authentication
+- Google authentication
+- MailKit
+- Hangfire.PostgreSql
+- StackExchange.Redis
+- BCrypt.Net-Next
+- `ProblemDetails`-based API error responses
+
+---
+
+## 9. Getting Started
+
+### Prerequisites
+
+Ensure the following are installed locally:
+
+- .NET 10 SDK
+- PostgreSQL
+- Visual Studio or Visual Studio Code
+- Git
+- ngrok for webhook testing
+
+### Setup Steps
+
+1. **Clone the repository**
+
+   ```bash
+   git clone <repository-url>
+   cd BookingRoom
+   ```
+
+2. **Restore dependencies**
+
+   ```bash
+   dotnet restore
+   ```
+
+3. **Configure application settings**
+
+   Update `appsettings.json` and environment-specific configuration with the following sections:
+
+   - `ConnectionStrings:DefaultConnection`
+   - `JwtSettings`
+   - `EmailSettings`
+   - `GoogleSettings`
+   - `SePay:MerchantId`
+   - `SePay:SecretKey`
+   - `SePay:IpnSecret`
+   - `SePay:CheckoutUrl`
+   - `SePay:ApiBaseUrl`
+
+   Sandbox example:
+
+   ```json
+   {
+     "SePay": {
+       "MerchantId": "YOUR_SANDBOX_MERCHANT_ID",
+       "SecretKey": "YOUR_SANDBOX_SECRET_KEY",
+       "IpnSecret": "YOUR_CONFIGURED_IPN_SECRET",
+       "CheckoutUrl": "https://pay-sandbox.sepay.vn/v1/checkout/init",
+       "ApiBaseUrl": "https://pgapi-sandbox.sepay.vn"
+     }
+   }
+   ```
+
+   Checkout responses contain `paymentUrl`, `checkoutMethod: "POST"`, and `checkoutFields`. The client must submit those fields as an HTML form to `paymentUrl`; navigating to the URL alone is not a valid SePay checkout request.
+
+4. **Apply database migrations**
+
+   ```bash
+   dotnet ef database update -p Infrastructure -s BookingRoom
+   ```
+
+5. **Run the API**
+
+   ```bash
+   dotnet run --project BookingRoom
+   ```
+
+6. **Expose the webhook endpoint locally**
+
+   Use `ngrok` to expose `POST /api/v1/webhooks/sepay/ipn`, then configure that public HTTPS URL and the matching IPN secret in SePay.
+
+### Recommended Local Validation Flow
+
+- register and verify a user,
+- create a room,
+- create and complete a booking,
+- submit room/user reviews,
+- initiate payment,
+- confirm the invoice is stored on the booking,
+- send webhook callbacks through ngrok,
+- and verify booking state, review visibility, room average rating, and webhook logs.
+
+---
