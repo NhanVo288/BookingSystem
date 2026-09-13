@@ -6,6 +6,8 @@
 
 The repository now includes a responsive React 19 + Vite + TypeScript application in `frontend/`. It covers room discovery and details, authentication and recovery, profiles, KYC, booking/payment/refund flows, host room and calendar controls, auctions, wallet history, reviews, notifications, and moderator workflows.
 
+Frontend API calls are centralized in `frontend/src/lib/roomlyApi.ts` and follow the generated OpenAPI `/api/v1` contract. Request DTOs, enum values, query parameters, payment redirects, pagination, and host/moderator operations are typed there instead of being duplicated inside page components.
+
 Run the complete stack:
 
 ```bash

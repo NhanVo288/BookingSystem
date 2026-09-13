@@ -1,13 +1,228 @@
-import { ArrowDownLeft, ArrowUpRight, ShieldCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { Badge, Empty, Field, Loading, Modal } from '../../components/UI'
-import { useAuth } from '../../lib/auth'
-import { roomlyApi } from '../../lib/roomlyApi'
-import type { Transaction, Wallet } from '../../types'
-import { date, kycStatusName, money, roleName } from '../../types'
-import { fail, heading } from './shared'
+import { ArrowDownLeft, ArrowUpRight, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Badge, Empty, Field, Loading, Modal } from "../../components/UI";
+import { useAuth } from "../../lib/auth";
+import { roomlyApi } from "../../lib/roomlyApi";
+import type { Transaction, Wallet } from "../../types";
+import { date, kycStatusName, money, roleName } from "../../types";
+import { fail, heading } from "./shared";
 
-export function ProfilePanel(){const {user,refresh}=useAuth();const [form,setForm]=useState({name:user?.name||'',phoneNumber:user?.phoneNumber||'',profilePhotoUrl:user?.profilePhotoUrl||'',bio:user?.bio||''});const save=async(e:React.FormEvent)=>{e.preventDefault();try{await roomlyApi.users.update(form);await refresh();toast.success('Đã lưu hồ sơ')}catch(e){fail(e)}};return <>{heading('Hồ sơ cá nhân','Cập nhật thông tin để chủ nhà và khách hiểu bạn hơn.')}<div className="profile-grid"><section className="panel-card profile-summary"><div className="avatar huge">{user?.profilePhotoUrl?<img src={user.profilePhotoUrl} alt=""/>:user?.name?.[0]}</div><h2>{user?.name}</h2><p>{user?.email}</p><Badge tone={user?.emailVerified?'green':'orange'}>{user?.emailVerified?'Email đã xác minh':'Chưa xác minh email'}</Badge><div className="profile-facts"><span>Vai trò <b>{roleName(user?.role||'Guest')}</b></span><span>KYC <b>{kycStatusName(user?.kycStatus||0)}</b></span><span>Tham gia <b>{date(user?.createdAt)}</b></span></div></section><form className="panel-card form-grid" onSubmit={save}><Field label="Họ và tên"><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></Field><Field label="Số điện thoại"><input value={form.phoneNumber} onChange={e=>setForm({...form,phoneNumber:e.target.value})}/></Field><Field label="Ảnh đại diện (URL)"><input type="url" value={form.profilePhotoUrl} onChange={e=>setForm({...form,profilePhotoUrl:e.target.value})}/></Field><Field label="Giới thiệu"><textarea rows={5} value={form.bio} onChange={e=>setForm({...form,bio:e.target.value})}/></Field><button className="btn">Lưu thay đổi</button></form></div></>}
+export function ProfilePanel() {
+  const { user, refresh } = useAuth();
+  const [form, setForm] = useState({
+    name: user?.name || "",
+    phoneNumber: user?.phoneNumber || "",
+    profilePhotoUrl: user?.profilePhotoUrl || "",
+    bio: user?.bio || "",
+  });
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await roomlyApi.users.update(form);
+      await refresh();
+      toast.success("Đã lưu hồ sơ");
+    } catch (e) {
+      fail(e);
+    }
+  };
+  return (
+    <>
+      {heading(
+        "Hồ sơ cá nhân",
+        "Cập nhật thông tin để chủ nhà và khách hiểu bạn hơn.",
+      )}
+      <div className="profile-grid">
+        <section className="panel-card profile-summary">
+          <div className="avatar huge">
+            {user?.profilePhotoUrl ? (
+              <img src={user.profilePhotoUrl} alt="" />
+            ) : (
+              user?.name?.[0]
+            )}
+          </div>
+          <h2>{user?.name}</h2>
+          <p>{user?.email}</p>
+          <Badge tone={user?.emailVerified ? "green" : "orange"}>
+            {user?.emailVerified ? "Email đã xác minh" : "Chưa xác minh email"}
+          </Badge>
+          <div className="profile-facts">
+            <span>
+              Vai trò <b>{roleName(user?.role || "Guest")}</b>
+            </span>
+            <span>
+              KYC <b>{kycStatusName(user?.kycStatus || 0)}</b>
+            </span>
+            <span>
+              Tham gia <b>{date(user?.createdAt)}</b>
+            </span>
+          </div>
+        </section>
+        <form className="panel-card form-grid" onSubmit={save}>
+          <Field label="Họ và tên">
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </Field>
+          <Field label="Số điện thoại">
+            <input
+              value={form.phoneNumber}
+              onChange={(e) =>
+                setForm({ ...form, phoneNumber: e.target.value })
+              }
+            />
+          </Field>
+          <Field label="Ảnh đại diện (URL)">
+            <input
+              type="url"
+              value={form.profilePhotoUrl}
+              onChange={(e) =>
+                setForm({ ...form, profilePhotoUrl: e.target.value })
+              }
+            />
+          </Field>
+          <Field label="Giới thiệu">
+            <textarea
+              rows={5}
+              value={form.bio}
+              onChange={(e) => setForm({ ...form, bio: e.target.value })}
+            />
+          </Field>
+          <button className="btn">Lưu thay đổi</button>
+        </form>
+      </div>
+    </>
+  );
+}
 
-export function WalletPanel(){const [wallet,setWallet]=useState<Wallet>();const [transactions,setTransactions]=useState<Transaction[]>([]);const [dialog,setDialog]=useState<'top-up'|'withdraw'>();const [amount,setAmount]=useState('');const [method,setMethod]=useState('BankTransfer');const load=()=>Promise.all([roomlyApi.wallet.get(),roomlyApi.wallet.history()]).then(([w,h])=>{setWallet(w);setTransactions(h.transactions?.items||[])}).catch(fail);useEffect(()=>{void load()},[]);const submit=async()=>{const value=Number(amount);if(value<=0)return toast.error('Số tiền phải lớn hơn 0');try{if(dialog==='top-up')await roomlyApi.wallet.topUp(value,method);else await roomlyApi.wallet.withdraw(value);toast.success(dialog==='top-up'?'Đã tạo giao dịch nạp tiền':'Đã rút tiền');setDialog(undefined);setAmount('');load()}catch(e){fail(e)}};return <>{heading('Ví Roomly','Quản lý số dư, bảo chứng và lịch sử giao dịch.')}{!wallet?<Loading/>:<><section className="wallet-hero"><div><span>SỐ DƯ KHẢ DỤNG</span><h2>{money(wallet.balance)}</h2><small><ShieldCheck/> Bảo chứng đang giữ: {money(wallet.insuranceHeldBalance)}</small></div><div><button className="light-action" onClick={()=>setDialog('top-up')}><ArrowDownLeft/> Nạp tiền</button><button className="light-action" onClick={()=>setDialog('withdraw')}><ArrowUpRight/> Rút tiền</button></div></section><section className="panel-card"><h2>Lịch sử giao dịch</h2>{transactions.length?<div className="transaction-list">{transactions.map(t=><div key={t.id}><span className={t.amount>=0?'tx-icon in':'tx-icon out'}>{t.amount>=0?<ArrowDownLeft/>:<ArrowUpRight/>}</span><div><strong>{t.description||t.type}</strong><small>{date(t.createdAt)} · {t.type}</small></div><b className={t.amount>=0?'positive':''}>{t.amount>=0?'+':''}{money(t.amount)}</b></div>)}</div>:<Empty title="Chưa có giao dịch"/>}</section></>}{dialog&&<Modal title={dialog==='top-up'?'Nạp tiền vào ví':'Rút tiền'} onClose={()=>setDialog(undefined)}><div className="modal-form"><Field label="Số tiền (VND)"><input type="number" min="1" value={amount} onChange={e=>setAmount(e.target.value)} autoFocus/></Field>{dialog==='top-up'&&<Field label="Phương thức"><select value={method} onChange={e=>setMethod(e.target.value)}><option value="BankTransfer">Chuyển khoản</option><option value="Card">Thẻ</option><option value="Ewallet">Ví điện tử</option></select></Field>}<button className="btn full" onClick={submit}>Xác nhận</button></div></Modal>}</>}
+export function WalletPanel() {
+  const [wallet, setWallet] = useState<Wallet>();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [dialog, setDialog] = useState<"top-up" | "withdraw">();
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("BankTransfer");
+  const load = () =>
+    Promise.all([roomlyApi.wallet.get(), roomlyApi.wallet.history()])
+      .then(([w, h]) => {
+        setWallet(w);
+        setTransactions(h.transactions?.items || []);
+      })
+      .catch(fail);
+  useEffect(() => {
+    void load();
+  }, []);
+  const submit = async () => {
+    const value = Number(amount);
+    if (value <= 0) return toast.error("Số tiền phải lớn hơn 0");
+    try {
+      if (dialog === "top-up") await roomlyApi.wallet.topUp(value, method);
+      else await roomlyApi.wallet.withdraw(value);
+      toast.success(
+        dialog === "top-up" ? "Đã tạo giao dịch nạp tiền" : "Đã rút tiền",
+      );
+      setDialog(undefined);
+      setAmount("");
+      load();
+    } catch (e) {
+      fail(e);
+    }
+  };
+  return (
+    <>
+      {heading("Ví Roomly", "Quản lý số dư, bảo chứng và lịch sử giao dịch.")}
+      {!wallet ? (
+        <Loading />
+      ) : (
+        <>
+          <section className="wallet-hero">
+            <div>
+              <span>SỐ DƯ KHẢ DỤNG</span>
+              <h2>{money(wallet.balance)}</h2>
+              <small>
+                <ShieldCheck /> Bảo chứng đang giữ:{" "}
+                {money(wallet.insuranceHeldBalance)}
+              </small>
+            </div>
+            <div>
+              <button
+                className="light-action"
+                onClick={() => setDialog("top-up")}
+              >
+                <ArrowDownLeft /> Nạp tiền
+              </button>
+              <button
+                className="light-action"
+                onClick={() => setDialog("withdraw")}
+              >
+                <ArrowUpRight /> Rút tiền
+              </button>
+            </div>
+          </section>
+          <section className="panel-card">
+            <h2>Lịch sử giao dịch</h2>
+            {transactions.length ? (
+              <div className="transaction-list">
+                {transactions.map((t) => (
+                  <div key={t.id}>
+                    <span
+                      className={t.amount >= 0 ? "tx-icon in" : "tx-icon out"}
+                    >
+                      {t.amount >= 0 ? <ArrowDownLeft /> : <ArrowUpRight />}
+                    </span>
+                    <div>
+                      <strong>{t.description || t.type}</strong>
+                      <small>
+                        {date(t.createdAt)} · {t.type}
+                      </small>
+                    </div>
+                    <b className={t.amount >= 0 ? "positive" : ""}>
+                      {t.amount >= 0 ? "+" : ""}
+                      {money(t.amount)}
+                    </b>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty title="Chưa có giao dịch" />
+            )}
+          </section>
+        </>
+      )}
+      {dialog && (
+        <Modal
+          title={dialog === "top-up" ? "Nạp tiền vào ví" : "Rút tiền"}
+          onClose={() => setDialog(undefined)}
+        >
+          <div className="modal-form">
+            <Field label="Số tiền (VND)">
+              <input
+                type="number"
+                min="1"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                autoFocus
+              />
+            </Field>
+            {dialog === "top-up" && (
+              <Field label="Phương thức">
+                <select
+                  value={method}
+                  onChange={(e) => setMethod(e.target.value)}
+                >
+                  <option value="BankTransfer">Chuyển khoản</option>
+                  <option value="Card">Thẻ</option>
+                  <option value="Ewallet">Ví điện tử</option>
+                </select>
+              </Field>
+            )}
+            <button className="btn full" onClick={submit}>
+              Xác nhận
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}

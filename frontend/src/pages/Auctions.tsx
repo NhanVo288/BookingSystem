@@ -2,9 +2,9 @@ import { ArrowRight, Clock3, Gavel, ShieldCheck, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Empty, Loading, Modal } from "../components/UI";
-import { api } from "../lib/api";
+import { roomlyApi } from "../lib/roomlyApi";
 import { useAuth } from "../lib/auth";
-import type { Auction, Paged } from "../types";
+import type { Auction } from "../types";
 import { date, money } from "../types";
 
 export default function Auctions() {
@@ -14,7 +14,8 @@ export default function Auctions() {
   const [selected, setSelected] = useState<Auction>();
   const [amount, setAmount] = useState("");
   const load = () =>
-    api<Paged<Auction> | Auction[]>("/auctions")
+    roomlyApi.auctions
+      .active()
       .then((x) => setItems(Array.isArray(x) ? x : x.items || []))
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
@@ -23,15 +24,9 @@ export default function Auctions() {
   }, []);
   const bid = async () => {
     if (!user) return toast.error("Đăng nhập để tham gia đấu giá");
+    if (!selected) return;
     try {
-      await api(`/auctions/${selected?.id}/bids`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          auctionId: selected?.id,
-          amount: Number(amount),
-        }),
-      });
+      await roomlyApi.auctions.bid(selected.id, Number(amount));
       toast.success("Giá của bạn đã được ghi nhận");
       setSelected(undefined);
       load();
